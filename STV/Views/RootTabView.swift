@@ -19,7 +19,7 @@ struct RootTabView: View {
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
                 TabView(selection: $tab) {
-                    Stack(path: $paths[0], reserveBottomBar: !metrics.useRail) { HomeView() }.tag(0)
+                    Stack(path: $paths[0], reserveBottomBar: false) { HomeView() }.tag(0)
                     Stack(path: $paths[1], reserveBottomBar: !metrics.useRail) { TVBoxHubView() }.tag(1)
                     Stack(path: $paths[2], reserveBottomBar: !metrics.useRail) { CategoryView() }.tag(2)
                     Stack(path: $paths[3], reserveBottomBar: !metrics.useRail) { ProfileView() }.tag(3)
@@ -59,9 +59,30 @@ private struct Stack<V: View>: View {
         NavigationStack(path: $path) {
             content
                 .toolbar(.hidden, for: .tabBar)
-                .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: reserveBottomBar ? GlassTabBar.clearance : 0) }
+                .toolbarBackground(.hidden, for: .tabBar)
+                .modifier(BottomBarScrollClearance(height: reserveBottomBar ? GlassTabBar.clearance : 0))
                 .routes()
-        }.environment(\.zoomNS, ns)
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .toolbarBackground(.hidden, for: .tabBar)
+        .environment(\.zoomNS, ns)
+    }
+}
+
+private struct BottomBarScrollClearance: ViewModifier {
+    let height: CGFloat
+
+    func body(content: Content) -> some View {
+        if height == 0 {
+            content
+        } else if #available(iOS 17.0, *) {
+            // Leave room after the last row while letting the scroll view draw behind the bar.
+            content.contentMargins(.bottom, height, for: .scrollContent)
+        } else {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: height)
+            }
+        }
     }
 }
 
@@ -98,7 +119,8 @@ struct GlassTabBar: View {
                 }
             }
             .padding(6)
-            .dsBar(30)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().strokeBorder(STVTheme.glassBorder).allowsHitTesting(false) }
 
             if let searchTag {
                 let searchOn = selection == searchTag
@@ -109,7 +131,8 @@ struct GlassTabBar: View {
                         .font(.system(size: 19, weight: searchOn ? .bold : .semibold))
                         .foregroundStyle(searchOn ? STVTheme.accent : STVTheme.text)
                         .frame(width: 60, height: 60)
-                        .dsBar(30)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay { Circle().strokeBorder(STVTheme.glassBorder).allowsHitTesting(false) }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("搜索")

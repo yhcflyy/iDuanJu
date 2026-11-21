@@ -103,35 +103,42 @@ extension View {
     }
     func routes() -> some View {
         navigationDestination(for: Route.self) { r in
-            switch r {
-            case .series(let s): DramaDetailView(series: s)
-            case .board(let b): BoardListView(board: b)
-            case .play(let s, let i): VerticalPlayerView(series: s, startIndex: i)
-            case .actor(let a): ActorView(actor: a)
-            case .search: SearchView(pushed: true)
-            case .searchFor(let q): SearchView(pushed: true, initialQuery: q)
-            case .actorRank: ActorRankView()
-            case .favorites: LibraryListView(kind: .favorites)
-            case .history: LibraryListView(kind: .history)
-            case .sources: SourcesView()
-            case .licenses: LicensesView()
-            case .channels: ChannelFeedView()
-            case .tgManage: TGManageView()
-            case .tgRules: TGRulesView()
-            case .tgSearch(let c): TGSearchView(channel: c)
-            case .downloads: DownloadsView()
-            case .tdlib: TDLibSettingsView()
-            case .mangaHome: MangaHomeView()
-            case .manga(let m): MangaDetailView(item: m)
-            case .mangaLibrary: MangaLibraryView()
-            case .tdChat(let id, let t): TDChatView(chatId: id, title: t)
-            case .plugins: PluginsView()
-            case .tvboxConfig: TVBoxConfigView()
-            case .tvboxVod(let siteKey, let sid, let title, let cover, let ep):
-                TVBoxVodPlayerView(siteKey: siteKey, seriesId: sid, initialTitle: title, initialCover: cover, startEp: ep)
-            case .tvboxLive(let repoId, let liveId, let chIdx):
-                TVBoxLivePlayerView(repoId: repoId, liveId: liveId, startChannelIndex: chIdx)
-            }
+            routeDestination(r)
+                .toolbar(.hidden, for: .tabBar)
+                .toolbarBackground(.hidden, for: .tabBar)
+        }
+    }
+
+    @ViewBuilder
+    private func routeDestination(_ r: Route) -> some View {
+        switch r {
+        case .series(let s): DramaDetailView(series: s)
+        case .board(let b): BoardListView(board: b)
+        case .play(let s, let i): VerticalPlayerView(series: s, startIndex: i)
+        case .actor(let a): ActorView(actor: a)
+        case .search: SearchView(pushed: true)
+        case .searchFor(let q): SearchView(pushed: true, initialQuery: q)
+        case .actorRank: ActorRankView()
+        case .favorites: LibraryListView(kind: .favorites)
+        case .history: LibraryListView(kind: .history)
+        case .sources: SourcesView()
+        case .licenses: LicensesView()
+        case .channels: ChannelFeedView()
+        case .tgManage: TGManageView()
+        case .tgRules: TGRulesView()
+        case .tgSearch(let c): TGSearchView(channel: c)
+        case .downloads: DownloadsView()
+        case .tdlib: TDLibSettingsView()
+        case .mangaHome: MangaHomeView()
+        case .manga(let m): MangaDetailView(item: m)
+        case .mangaLibrary: MangaLibraryView()
+        case .tdChat(let id, let t): TDChatView(chatId: id, title: t)
+        case .plugins: PluginsView()
+        case .tvboxConfig: TVBoxConfigView()
+        case .tvboxVod(let siteKey, let sid, let title, let cover, let ep):
+            TVBoxVodPlayerView(siteKey: siteKey, seriesId: sid, initialTitle: title, initialCover: cover, startEp: ep)
+        case .tvboxLive(let repoId, let liveId, let chIdx):
+            TVBoxLivePlayerView(repoId: repoId, liveId: liveId, startChannelIndex: chIdx)
         }
     }
 }

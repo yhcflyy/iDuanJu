@@ -155,7 +155,6 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
     private var statusObservation: NSKeyValueObservation?
     @Published private(set) var waitingForMedia = false
     private var audioObservers: [NSObjectProtocol] = []
-    private var nowPlaying: MPNowPlayingSession?
     @Published private(set) var pipActive = false
     @Published var pipError: String?
     private var restoringPiP = false
@@ -179,14 +178,6 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
 
     func start() {
         guard observer == nil else { return }
-        let player = av.player
-        let session = MPNowPlayingSession(players: [player])
-        session.automaticallyPublishesNowPlayingInfo = true
-        nowPlaying = session
-        let commands = session.remoteCommandCenter
-        commands.playCommand.addTarget(self, action: #selector(remotePlay))
-        commands.pauseCommand.addTarget(self, action: #selector(remotePause))
-        commands.togglePlayPauseCommand.addTarget(self, action: #selector(remoteToggle))
         #if DEBUG
         // UI tests: an interruption that never ends (STV_FAKE_INTERRUPT=<seconds after start>).
         if let s = ProcessInfo.processInfo.environment["STV_FAKE_INTERRUPT"].flatMap(Double.init) {
@@ -217,7 +208,7 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
         registerSharedCommands()
     }
 
-    /// Lock-screen / headset commands while Aether plays (AVPlayer's own MPNowPlayingSession covers the fallback).
+    /// Lock-screen and headset commands for both playback engines.
     private func registerSharedCommands() {
         guard !sharedCommandsRegistered else { return }
         sharedCommandsRegistered = true
@@ -228,7 +219,7 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
     }
 
     private func publishNowPlaying() {
-        guard engineKind == .mpv, let i = readyIndex, episodes.indices.contains(i) else { return }
+        guard let i = readyIndex, episodes.indices.contains(i) else { return }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: detail?.title ?? series.title,
             MPMediaItemPropertyAlbumTitle: series.source.isLongVideo ? series.source.label : "第\(episodes[i].ep)集",
@@ -261,29 +252,25 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
         endObserver = nil
         audioObservers.forEach(NotificationCenter.default.removeObserver)
         audioObservers.removeAll()
-        if let commands = nowPlaying?.remoteCommandCenter {
-            [commands.playCommand, commands.pauseCommand, commands.togglePlayPauseCommand].forEach { $0.removeTarget(self) }
-        }
         if sharedCommandsRegistered {
             let c = MPRemoteCommandCenter.shared()
             [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand].forEach { $0.removeTarget(self) }
             sharedCommandsRegistered = false
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         }
-        nowPlaying = nil
         if pip?.isPictureInPictureActive == true {
             pip?.stopPictureInPicture()
         }
+        engine.onPlaybackRequested = nil
+        suppliedEngine?.stop()
+        av.stop()
+        mpv?.stop()
         pip = nil
         pipIdentity = nil
         pipActive = false
         pipPossible = false
         timer?.invalidate(); timer = nil
         observer = nil
-        engine.onPlaybackRequested = nil
-        suppliedEngine?.stop()
-        av.stop()
-        mpv?.stop()
         readyIndex = nil
         current = nil
         backgrounded = false
@@ -590,7 +577,7 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
                     let next = episodes.indices.filter { $0 > i && $0 <= i + 3 }.map { episodes[$0].vid }
                     Task { await HongguoClient.shared.prefetch(vids: next) }
                 }
-                if engineKind == .avplayer { _ = await nowPlaying?.becomeActiveIfPossible() } else { publishNowPlaying() }
+                publishNowPlaying()
             } catch {
                 guard activation == token else { return }
                 errors[i] = error.localizedDescription
@@ -940,9 +927,10 @@ final class PlaybackCoordinator: NSObject, @preconcurrency AVPictureInPictureCon
             lastTech = Date()
             let stream = chosen[i]
             let eng = engine
+            let token = activation
             Task { [weak self] in
                 let t = await eng.tech(stream: stream)
-                guard let self, self.engine === eng else { return }
+                guard let self, self.engine === eng, self.activation == token else { return }
                 if t != self.tech { self.tech = t }
                 self.refreshMediaOptions()
                 self.refreshPiP()

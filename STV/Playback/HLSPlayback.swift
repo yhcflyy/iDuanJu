@@ -31,11 +31,7 @@ final class HLSPlayback: NSObject, AVAssetResourceLoaderDelegate {
         guard let url = req.request.url, let scheme = url.scheme else { return false }
         if scheme == Self.keyScheme {
             guard let key = Bytes.fromHex(keyHex), key.count == 16 else { req.finishLoading(with: URLError(.userAuthenticationRequired)); return true }
-            req.contentInformationRequest?.contentType = "public.data"
-            req.contentInformationRequest?.contentLength = 16
-            req.contentInformationRequest?.isByteRangeAccessSupported = false
-            req.dataRequest?.respond(with: Data(key))
-            req.finishLoading()
+            finish(req, with: Data(key), contentType: "public.data")
             return true
         }
         guard scheme.hasPrefix(Self.plScheme), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
@@ -48,12 +44,21 @@ final class HLSPlayback: NSObject, AVAssetResourceLoaderDelegate {
                 req.finishLoading(with: err ?? URLError(.badServerResponse)); return
             }
             let text = self.rewrite(HLSAdFilter.apply(String(decoding: data, as: UTF8.self), base: real), base: real)
-            req.contentInformationRequest?.contentType = "public.m3u-playlist"
-            req.contentInformationRequest?.contentLength = Int64(text.utf8.count)
-            req.dataRequest?.respond(with: Data(text.utf8))
-            req.finishLoading()
+            self.finish(req, with: Data(text.utf8), contentType: "public.m3u-playlist")
         }.resume()
         return true
+    }
+
+    private func finish(_ request: AVAssetResourceLoadingRequest, with data: Data, contentType: String) {
+        if let info = request.contentInformationRequest {
+            // AVFoundation allows an unspecified type when our UTI is outside its allowlist.
+            let allowedTypes = info.allowedContentTypes
+            info.contentType = allowedTypes?.contains(contentType) == false ? nil : contentType
+            info.contentLength = Int64(data.count)
+            info.isByteRangeAccessSupported = false
+        }
+        request.dataRequest?.respond(with: data)
+        request.finishLoading()
     }
 
     /// Absolutize URIs; nested playlists go back through the loader, keys go to the local key scheme.

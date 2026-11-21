@@ -27,6 +27,9 @@ import UIKit
     private var statusObservation: NSKeyValueObservation?
     private var endObserver: NSObjectProtocol?
     private var generation = 0
+    /// `.onDisappear` can fire more than once (sheet presentation, `.id()` swap, PiP). Stopping twice
+    /// would re-teardown observers around an already-detached player.
+    private var stopped = false
     private var audioGroup: AVMediaSelectionGroup?
     private var legibleGroup: AVMediaSelectionGroup?
     private(set) var audioTracks: [MediaTrack] = []
@@ -46,6 +49,7 @@ import UIKit
     func supports(_ src: PlaybackCoordinator.Source) -> Bool { true }
 
     func load(_ src: PlaybackCoordinator.Source, stream: HGStream?, start: Double?, title: String) async throws {
+        stopped = false
         generation += 1
         let gen = generation
         transport.acceptingRequests = false
@@ -99,12 +103,17 @@ import UIKit
     }
 
     func stop() {
+        guard !stopped else { return }
+        stopped = true
         transport.acceptingRequests = false
+        transport.expectPaused(true)
         generation += 1
         statusObservation = nil
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = nil
-        player.pause()
+        // Do not call `player.pause()` here: it goes through -[AVPlayer setRate:], which fans out
+        // to rate observers. Removing the current item stops playback without that fan-out, and
+        // avoids EXC_BAD_ACCESS when the coordinator's NowPlaying/PiP observers are being torn down.
         player.replaceCurrentItem(with: nil)
     }
 

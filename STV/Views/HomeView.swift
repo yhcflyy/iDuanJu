@@ -139,6 +139,7 @@ struct HomeView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea(.container, edges: .bottom)
         }
         .dsAmbient(visible: !pinned)
         .toolbar(.hidden, for: .navigationBar)
